@@ -1,1 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stratagem – The Trader’s Unfair Advantage</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <style>
+      :root {
+        --color-bg-light: #f8fafc;
+        --color-bg-dark: #0f172a;
+        --color-card-light: #ffffff;
+        --color-card-dark: #1e293b;
+        --color-text-light: #1e293b;
+        --color-text-dark: #f1f5f9;
+        --accent: #38bdf8;
+      }
+      body {
+        transition: background 0.3s, color 0.3s;
+      }
+      .dark body {
+        background: var(--color-bg-dark);
+        color: var(--color-text-dark);
+      }
+    </style>
+  </head>
+
+  <body class="bg-[var(--color-bg-light)] text-[var(--color-text-light)] min-h-screen flex flex-col">
+    <!-- Header -->
+    <header class="p-4 flex justify-between items-center shadow-md bg-[var(--color-card-light)] dark:bg-[var(--color-card-dark)]">
+      <h1 class="text-2xl font-bold text-[var(--accent)]">Stratagem</h1>
+      <div class="flex items-center gap-3">
+        <span class="text-sm italic hidden sm:block">The Trader’s Unfair Advantage</span>
+        <button
+          id="themeToggle"
+          class="p-2 rounded-xl border border-[var(--accent)] hover:bg-[var(--accent)] hover:text-white transition"
+        >
+          🌞 / 🌙
+        </button>
+      </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav
+      class="flex justify-center gap-6 py-3 text-sm bg-[var(--color-card-light)] dark:bg-[var(--color-card-dark)] shadow-sm"
+    >
+      <button class="nav-btn font-semibold" data-page="home">Home</button>
+      <button class="nav-btn" data-page="analytics">Analytics</button>
+      <button class="nav-btn" data-page="sessions">Sessions</button>
+      <button class="nav-btn" data-page="pairs">Pairs</button>
+      <button class="nav-btn" data-page="about">About</button>
+    </nav>
+
+    <!-- Content -->
+    <main id="content" class="flex-1 p-6 max-w-5xl mx-auto w-full">
+      <section id="home" class="page active">
+        <h2 class="text-xl font-semibold mb-3">Welcome to Stratagem</h2>
+        <p class="mb-4">
+          Upload your trading CSV file to visualize your sessions, pairs, and performance.
+        </p>
+        <input type="file" id="csvFile" accept=".csv" class="block mb-4" />
+        <div id="preview" class="overflow-x-auto text-sm"></div>
+      </section>
+
+      <section id="analytics" class="page hidden">
+        <h2 class="text-xl font-semibold mb-3">Analytics</h2>
+        <canvas id="chartWinRate" height="120"></canvas>
+      </section>
+
+      <section id="sessions" class="page hidden">
+        <h2 class="text-xl font-semibold mb-3">Session Performance</h2>
+        <canvas id="chartSessions" height="120"></canvas>
+      </section>
+
+      <section id="pairs" class="page hidden">
+        <h2 class="text-xl font-semibold mb-3">Pairs Breakdown</h2>
+        <canvas id="chartPairs" height="120"></canvas>
+      </section>
+
+      <section id="about" class="page hidden">
+        <h2 class="text-xl font-semibold mb-3">About Stratagem</h2>
+        <p>
+          Stratagem is your all-in-one trading performance dashboard designed to
+          help you analyze your sessions, track profitable pairs, and make
+          informed decisions. Built for traders who seek the unfair advantage.
+        </p>
+      </section>
+    </main>
+
+    <footer class="text-center text-xs py-4 opacity-60">
+      © <span id="year"></span> Stratagem – The Trader’s Unfair Advantage
+    </footer>
+
+    <script>
+      // 🕐 Year
+      document.getElementById("year").textContent = new Date().getFullYear();
+
+      // 🌗 Theme Toggle
+      const themeToggle = document.getElementById("themeToggle");
+      const userPref = localStorage.getItem("theme");
+      if (userPref === "dark") document.documentElement.classList.add("dark");
+
+      themeToggle.addEventListener("click", () => {
+        document.documentElement.classList.toggle("dark");
+        const mode = document.documentElement.classList.contains("dark") ? "dark" : "light";
+        localStorage.setItem("theme", mode);
+      });
+
+      // 📂 Navigation
+      const pages = document.querySelectorAll(".page");
+      document.querySelectorAll(".nav-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          pages.forEach((p) => p.classList.add("hidden"));
+          document.getElementById(btn.dataset.page).classList.remove("hidden");
+          document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("font-semibold"));
+          btn.classList.add("font-semibold");
+        });
+      });
+
+      // 📈 Charts
+      let chartWinRate, chartSessions, chartPairs;
+      function updateCharts(data) {
+        const ctx1 = document.getElementById("chartWinRate");
+        const ctx2 = document.getElementById("chartSessions");
+        const ctx3 = document.getElementById("chartPairs");
+
+        const wins = data.filter((d) => d.Result === "Win").length;
+        const losses = data.filter((d) => d.Result === "Loss").length;
+
+        chartWinRate = new Chart(ctx1, {
+          type: "doughnut",
+          data: {
+            labels: ["Wins", "Losses"],
+            datasets: [
+              {
+                data: [wins, losses],
+                backgroundColor: ["#22c55e", "#ef4444"],
+              },
+            ],
+          },
+        });
+
+        const sessionMap = {};
+        data.forEach((d) => {
+          sessionMap[d.Session] = (sessionMap[d.Session] || 0) + 1;
+        });
+        chartSessions = new Chart(ctx2, {
+          type: "bar",
+          data: {
+            labels: Object.keys(sessionMap),
+            datasets: [
+              {
+                label: "Trades per Session",
+                data: Object.values(sessionMap),
+                backgroundColor: "#38bdf8",
+              },
+            ],
+          },
+        });
+
+        const pairMap = {};
+        data.forEach((d) => {
+          pairMap[d.Pair] = (pairMap[d.Pair] || 0) + 1;
+        });
+        chartPairs = new Chart(ctx3, {
+          type: "bar",
+          data: {
+            labels: Object.keys(pairMap),
+            datasets: [
+              {
+                label: "Trades per Pair",
+                data: Object.values(pairMap),
+                backgroundColor: "#6366f1",
+              },
+            ],
+          },
+        });
+      }
+
+      // 🧾 CSV Upload
+      document.getElementById("csvFile").addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        Papa.parse(file, {
+          header: true,
+          complete: (results) => {
+            const data = results.data;
+            if (data.length === 0) return;
+            const keys = Object.keys(data[0]);
+            const table = `
+              <table class="w-full border text-left">
+                <thead><tr>${keys.map((k) => `<th class='p-2 border'>${k}</th>`).join("")}</tr></thead>
+                <tbody>
+                  ${data
+                    .map(
+                      (row) =>
+                        `<tr>${keys
+                          .map((k) => `<td class='p-2 border'>${row[k] || ""}</td>`)
+                          .join("")}</tr>`
+                    )
+                    .join("")}
+                </tbody>
+              </table>`;
+            document.getElementById("preview").innerHTML = table;
+            updateCharts(data);
+          },
+        });
+      });
+    </script>
+  </body>
+</html>
 
